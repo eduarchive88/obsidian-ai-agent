@@ -1,11 +1,10 @@
 {
-  "id": "obsidian-second-brain-agent",
-  "name": "Second Brain Agent",
-  "version": "0.2.15",
-  "minAppVersion": "1.4.0",
-  "description": "AI-powered Second Brain automation - auto-discover connections, analyze knowledge gaps, and enhance your notes with intelligent insights",
-  "author": "OSBA Team",
-  "authorUrl": "https://github.com/reallygood83/obsidian-ai-agent",
-  "fundingUrl": "",
-  "isDesktopOnly": true
+	"id": "obsidian-local-ai-agent",
+	"name": "Local AI Agent",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Local AI Agent using Ollama or LM Studio",
+	"author": "OBSA modify",
+	"authorUrl": "https://github.com/eduarchive88/obsidian-ai-agent",
+	"isDesktopOnly": false
 }
