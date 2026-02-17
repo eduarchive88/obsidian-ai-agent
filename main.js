@@ -91,7 +91,7 @@ class SecondBrainView extends ItemView {
                 const response = await this.plugin.callAI(query);
                 appendMessage('ai', response);
             } catch (e) {
-                appendMessage('ai', '에러: AI 서버에 연결할 수 없습니다. 설정을 확인해 주세요.');
+                appendMessage('ai', `에러: ${this.plugin.settings.provider === 'local' ? '로컬 서버' : 'OpenAI'} 연결에 실패했습니다. 설정을 확인해 주세요.`);
                 console.error(e);
             }
         });
@@ -134,32 +134,42 @@ class AIAgentPlugin extends Plugin {
     async callAI(prompt) {
         const { provider, baseUrl, apiKey, model, systemPrompt } = this.settings;
         
+        // 프로바이더에 따른 엔드포인트 및 인증 설정
         const url = provider === 'openai' 
             ? 'https://api.openai.com/v1/chat/completions' 
             : `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-        const response = await requestUrl({
-            url: url,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: prompt }
-                ],
-                temperature: 0.7
-            })
-        });
+        const headers = {
+            'Content-Type': 'application/json'
+        };
 
-        if (response.status !== 200) {
-            throw new Error(`API 오류: ${response.status}`);
+        if (apiKey && apiKey.trim() !== '') {
+            headers['Authorization'] = `Bearer ${apiKey}`;
         }
 
-        return response.json.choices[0].message.content;
+        try {
+            const response = await requestUrl({
+                url: url,
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.7
+                })
+            });
+
+            if (response.status !== 200) {
+                throw new Error(`API 오류: ${response.status}`);
+            }
+
+            return response.json.choices[0].message.content;
+        } catch (error) {
+            throw error;
+        }
     }
 
     async loadSettings() {
@@ -183,6 +193,7 @@ class AIAgentSettingTab extends PluginSettingTab {
         containerEl.empty();
         containerEl.createEl('h2', { text: 'Second Brain Agent 설정' });
 
+        // 프로바이더 선택 드롭다운
         new Setting(containerEl)
             .setName('AI 프로바이더 선택')
             .setDesc('로컬 AI(Ollama 등) 또는 OpenAI를 선택하세요.')
@@ -192,10 +203,15 @@ class AIAgentSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.provider)
                 .onChange(async (value) => {
                     this.plugin.settings.provider = value;
+                    // 프로바이더 변경 시 기본값 세팅 보조
+                    if (value === 'local' && this.plugin.settings.baseUrl === '') {
+                        this.plugin.settings.baseUrl = 'http://localhost:11434/v1';
+                    }
                     await this.plugin.saveSettings();
-                    this.display(); // UI 새로고침
+                    this.display(); // UI 새로고침하여 조건부 항목 표시
                 }));
 
+        // 로컬 서버 주소 (로컬 선택 시에만 표시)
         if (this.plugin.settings.provider === 'local') {
             new Setting(containerEl)
                 .setName('로컬 서버 주소')
@@ -209,20 +225,22 @@ class AIAgentSettingTab extends PluginSettingTab {
                     }));
         }
 
+        // 모델 이름 설정
         new Setting(containerEl)
             .setName('모델 이름')
-            .setDesc('사용할 모델명을 정확히 입력하세요. (예: llama3, mistral, gpt-4o)')
+            .setDesc('사용할 모델명을 입력하세요 (로컬: llama3, mistral / OpenAI: gpt-4o 등)')
             .addText(text => text
-                .setPlaceholder('llama3')
+                .setPlaceholder(this.plugin.settings.provider === 'local' ? 'llama3' : 'gpt-4o')
                 .setValue(this.plugin.settings.model)
                 .onChange(async (value) => {
                     this.plugin.settings.model = value;
                     await this.plugin.saveSettings();
                 }));
 
+        // API 키 설정
         new Setting(containerEl)
             .setName('API 키')
-            .setDesc('OpenAI 사용 시 필요합니다. 로컬은 무시해도 됩니다.')
+            .setDesc(this.plugin.settings.provider === 'openai' ? 'OpenAI API 키를 입력하세요.' : '로컬 서버에서 인증이 필요한 경우 입력하세요.')
             .addText(text => text
                 .setPlaceholder('sk-...')
                 .setValue(this.plugin.settings.apiKey)
@@ -231,15 +249,22 @@ class AIAgentSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        // 시스템 프롬프트 설정
         new Setting(containerEl)
             .setName('시스템 프롬프트')
-            .setDesc('AI의 성격과 역할을 정의합니다.')
+            .setDesc('AI의 역할과 페르소나를 정의합니다.')
             .addTextArea(text => text
+                .setPlaceholder('당신은 지식 관리 전문가입니다...')
                 .setValue(this.plugin.settings.systemPrompt)
                 .onChange(async (value) => {
                     this.plugin.settings.systemPrompt = value;
                     await this.plugin.saveSettings();
                 }));
+        
+        containerEl.createEl('p', { 
+            text: '설정 변경 후 사이드바를 다시 열면 변경사항이 적용됩니다.',
+            cls: 'setting-item-description'
+        });
     }
 }
 
